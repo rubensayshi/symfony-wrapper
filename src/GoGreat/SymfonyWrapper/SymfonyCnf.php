@@ -373,26 +373,64 @@ abstract class SymfonyCnf
 		if (!is_array($cnfSections))
 			return;
 
+		$replacement 	= array();	
+		$search			= array();
+		$replace		= array();
+		
 		foreach ($cnfSections as $key => $section)
 		{
-			if (is_array($section)) { 
-				// an actual section - so concatenate
-				self::$config = $overwrite ? array_merge(self::$config, $section) : array_merge($section, self::$config);
-				
-				if (!isset(self::$config_section[ $key ])) {
-					self::$config_section[ $key ] = $section;
-				} else {
-					self::$config_section[ $key ] = $overwrite	? array_merge(self::$config_section[ $key ], $section)
-																: array_merge($section, self::$config_section[ $key ])
-																;
+			if($key == 'import') {
+				foreach($section as $imports)
+					foreach($imports as $importFile)
+						if($importFile = SymfonyApp::getRootDir() .'/'. $importFile)
+							if(file_exists($importFile))
+								$replacement = array_merge($replacement, parse_ini_file($importFile, true));
+											
+				foreach($replacement as $k => $v) {
+					$search[] 	= "%{$k}%";					
+					$replace[] 	= $v;
 				}
+			}
+			else 
+			{				
+				// do the replacements from the import
+				$section = self::parseConfigReplacements($section, $search, $replace);
 				
-				
-			} else if (!is_numeric($key) && is_scalar($section)) {
-				// an ini setting (that falls outside any section) - add to array an remove from sectionsd
-				if ($overwrite || !isset(self::$config[$key]))				
-				self::$config[$key] = $section;				
+				if (is_array($section)) { 
+					// an actual section - so concatenate
+					self::$config = $overwrite ? array_merge(self::$config, $section) : array_merge($section, self::$config);
+					
+					if (!isset(self::$config_section[ $key ])) {
+						self::$config_section[ $key ] = $section;
+					} else {
+						self::$config_section[ $key ] = $overwrite	? array_merge(self::$config_section[ $key ], $section)
+																	: array_merge($section, self::$config_section[ $key ])
+																	;
+					}
+					
+					
+				} else if (!is_numeric($key) && is_scalar($section)) {
+					// an ini setting (that falls outside any section) - add to array an remove from sectionsd
+					if ($overwrite || !isset(self::$config[$key]))				
+						self::$config[$key] = $section;				
+				}
 			}
 		}	
+	}
+	
+	static private function parseConfigReplacements($data, $search, $replace)
+	{
+		$array = is_array($data);
+		
+		if(!$array)
+			$data = array($data);
+		
+		if(empty($search) || empty($replace))
+			return $data;
+			
+		foreach($data as &$value)
+			$value = str_replace($search, $replace, $value);
+		
+		return ($array ? $data : reset($data));
 	}
 }
